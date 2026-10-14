@@ -177,9 +177,8 @@ RUNBOOK.example.md config.example.yaml docker-compose.yml Dockerfile
 - The runbook is enforced by the agent's instructions plus the claim ledger;
   the tooling does not sandbox the agent's shell. Run the agent as a
   least-privilege user with sudo rules scoped to the allowed actions.
-- The Docker demo and CI docker job have not been executed in the environment
-  this draft was prepared in (no Docker available there); unit tests and the
-  local demo have.
+- The Docker demo runs in CI (`docker-demo` job, GitHub Actions); it has not
+  been run against real hosts.
 
 ## Role and how it was built
 

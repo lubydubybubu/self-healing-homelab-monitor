@@ -84,7 +84,7 @@ docker compose up --build      # 가짜 대상 컨테이너 + dry-run 모니터
 
 - 단일 스케줄러, 이력·대시보드 없음 (Prometheus, Uptime Kuma 등과 대체 관계가 아님).
 - 런북은 지시문 + claim 원장으로 강제되며, 셸 샌드박스는 아님 → 최소 권한 사용자로 실행 권장.
-- 이 초안을 만든 환경에는 Docker가 없어 Docker 데모는 실행하지 못했고, 단위 테스트와 로컬 데모만 실행했습니다.
+- Docker 데모는 CI(GitHub Actions의 `docker-demo` 작업)에서 실행되며, 실제 호스트에 대해서는 실행하지 않았습니다.
 
 ## 역할
 
