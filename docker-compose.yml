@@ -1,0 +1,21 @@
+# Demo: a fake target service + the monitor in dry-run mode.
+#
+#   docker compose up --build            # watch the monitor logs
+#   docker compose stop target           # ~2 cycles later: problem + gate diff
+#   docker compose start target          # next cycle: recovered + gate diff
+#
+# No real hosts, no SSH, no webhooks. Notifications go to stdout only.
+services:
+  target:
+    image: python:3.12-slim
+    command: ["python", "-m", "http.server", "8080", "--bind", "0.0.0.0"]
+    working_dir: /srv
+
+  monitor:
+    build: .
+    depends_on: [target]
+    command: ["-c", "/app/demo/config.demo.yaml", "check", "all", "--dry-run", "--loop", "10"]
+    environment:
+      PYTHONUNBUFFERED: "1"
+    tmpfs:
+      - /state

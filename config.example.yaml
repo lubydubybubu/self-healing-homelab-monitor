@@ -1,0 +1,79 @@
+# Example configuration. Copy to config.yaml and edit.
+# All addresses below are documentation placeholders (RFC 5737 / CGNAT example
+# ranges and example.internal names). Secrets NEVER go in this file: notifiers
+# read them from environment variables.
+
+state_dir: ./state            # relative to this file; one JSON file per host + gate.json + ledger.json
+utc_offset: "+00:00"          # used for quiet hours
+flap_threshold: 2             # consecutive sightings before a new problem is reported
+quiet_hours:                  # non-urgent events are held, then flushed after `end`
+  start: 23
+  end: 8
+
+notifiers:
+  - type: stdout
+  - type: discord_webhook
+    webhook_url_env: MONITOR_DISCORD_WEBHOOK_URL   # env var holding the webhook URL
+    mention_user_id_env: MONITOR_OWNER_USER_ID     # optional: user to @mention on urgent events/reports
+
+gate:
+  # Conditions the agent cannot act on (e.g. a laptop that is simply closed).
+  skip:
+    - laptop:offline
+
+hosts:
+  - name: hypervisor
+    label: "Hypervisor (Proxmox)"
+    ssh:
+      user: monitor
+      address: pve.example.internal
+      key_path: ~/.ssh/monitor_ed25519
+    checks:
+      - type: proxmox_vms
+        vms: [101, 102]           # omit to watch every VM in `qm list`
+        urgent: true
+      - type: disk_usage
+        via: ssh
+        paths: [/]
+        threshold: 90
+        urgent: true
+      - type: tcp
+        id: nas-smb
+        name: NAS file share (SMB)
+        host: 192.0.2.30
+        port: 445
+        urgent: true
+
+  - name: app-vm
+    label: "App VM"
+    ssh:
+      user: monitor
+      address: 192.0.2.21
+    checks:
+      - type: ssh_reachable
+      - type: systemd_units
+        via: ssh
+        units: [web-app.service, chat-bot.service]
+        urgent: true
+      - type: http
+        id: web-health
+        name: Web app health endpoint
+        url: http://192.0.2.21:8080/healthz
+        urgent: true
+
+  - name: desktop
+    label: "Desktop PC (Windows)"
+    tailscale_ip: 100.64.0.10
+    ssh:
+      user: monitor
+      address: 100.64.0.10
+      key_path: ~/.ssh/desktop_ed25519
+    checks:
+      - type: tailscale_online      # offline -> remaining checks skipped
+      - type: ssh_reachable
+
+  - name: laptop
+    label: "Laptop"
+    tailscale_ip: 100.64.0.20
+    checks:
+      - type: tailscale_online

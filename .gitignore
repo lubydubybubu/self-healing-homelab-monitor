@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+
+# Local runtime data: never commit
+config.yaml
+RUNBOOK.md
+state/
+*.json.tmp
+.env
+.env.*
+*.pem
+*_ed25519
+*_rsa

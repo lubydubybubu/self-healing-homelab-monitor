@@ -1,0 +1,23 @@
+# Demo config used by docker-compose. The "target" container runs a tiny HTTP
+# service you can stop/start to watch the monitor react.
+state_dir: /state
+utc_offset: "+00:00"
+flap_threshold: 2
+notifiers:
+  - type: stdout
+hosts:
+  - name: demo-target
+    label: "Demo target"
+    checks:
+      - type: http
+        id: web
+        name: target web service
+        url: http://target:8080/
+        timeout: 3
+        urgent: true
+      - type: tcp
+        id: tcp-8080
+        name: target port 8080
+        host: target
+        port: 8080
+        timeout: 3
