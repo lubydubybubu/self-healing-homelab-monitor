@@ -47,6 +47,45 @@ flowchart LR
 5. **에이전트**: diff를 입력으로, `RUNBOOK.example.md`를 지시문으로 받음. 조치 전
    `claim` 필수, 24시간 내 두 번째 claim은 종료코드 3 → 소유자에게 질문.
 6. **보고**: 문제당 한 번, 원인/조치/결과를 소유자 멘션으로 전송.
+   `--issue host:key --action "..." --result fixed|failed|escalated`를 붙이면 결과가 지표용으로 기록됨
+   (기존 사용법은 그대로 동작).
+
+## 측정: 이벤트 로그와 지표
+
+`<state_dir>/events.jsonl`에 한 줄 한 JSON으로 추가 기록합니다 (권한 0600, `O_APPEND` + `fsync`).
+
+- `issue_opened`: 보고 대상 집합에 키가 들어올 때(플랩 방지 이후). 첫 실행 기준선은 `seed: true`
+- `issue_resolved`: 보고된 키가 사라질 때
+- `remediation`: `claim`(`claimed`/`refused`), `report --result`(`fixed`/`failed`/`escalated`)
+
+기록 실패는 stderr 경고만 남기고 점검·claim은 계속 진행합니다.
+`homelab-monitor metrics [--since 7d|24h|all] [--json]`(읽기 전용)은 같은 `host:key`의 발생→다음 복구를
+짝지어 이슈별 발생/복구 수, 진행 중 이슈, 복구 시간 중앙값·p90, 결과별·조치별 조치 수,
+`fixed` 조치가 있었던 경우와 없었던 경우의 MTTR을 보여줍니다. seed 발생은 집계·시간 계산에서 제외합니다.
+
+예시 출력(**합성 데이터**, 설명용):
+
+```text
+Homelab monitor metrics (all time)
+- events recorded: 14
+- issues opened: 4 | resolved: 4
+  - app:disk:/: opened 1 / resolved 1
+  - app:svc:web: opened 1 / resolved 1
+  - nas:offline: opened 1 / resolved 1
+  - pve:vm:101: opened 1 / resolved 1
+- time to resolve (n=4): median 32m | p90 2h 15m
+- remediation events: 6 (claimed 3, escalated 1, fixed 2)
+  - claim:clean cache: 1
+  - claim:restart web: 1
+  - claim:start vm: 1
+  - report:clean cache: 1
+  - report:restart web: 1
+  - report:start vm: 1
+- MTTR with a fixed remediation: mean 8m | median 8m (n=2)
+- MTTR without: mean 1h 52m | median 1h 52m (n=2)
+```
+
+제 홈랩의 실제 수치가 아닙니다. 비공개 운영 버전에도 같은 이벤트 로그가 있지만 측정값은 여기 공개하지 않습니다.
 
 ## 안전 모델
 
@@ -67,7 +106,7 @@ flowchart LR
 ```bash
 python -m venv .venv && . .venv/bin/activate
 pip install -e ".[dev]"
-pytest -q
+pytest -q                      # 70개 테스트, 모두 가짜 객체 사용
 python demo/local_demo.py      # Docker 없이 로컬 데모
 docker compose up --build      # 가짜 대상 컨테이너 + dry-run 모니터
 ```
@@ -82,7 +121,8 @@ docker compose up --build      # 가짜 대상 컨테이너 + dry-run 모니터
 
 ## 한계
 
-- 단일 스케줄러, 이력·대시보드 없음 (Prometheus, Uptime Kuma 등과 대체 관계가 아님).
+- 단일 스케줄러, 대시보드 없음 (Prometheus, Uptime Kuma 등과 대체 관계가 아님). 이벤트 로그는 장애 단위 지표이지 시계열 이력이 아님.
+- 조치 유무별 MTTR은 적은 표본의 상관 비교이지 통제된 비교가 아님 (각 수치 옆에 n 표시).
 - 런북은 지시문 + claim 원장으로 강제되며, 셸 샌드박스는 아님 → 최소 권한 사용자로 실행 권장.
 - Docker 데모는 CI(GitHub Actions의 `docker-demo` 작업)에서 실행되며, 실제 호스트에 대해서는 실행하지 않았습니다.
 

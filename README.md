@@ -81,7 +81,60 @@ flowchart LR
    as instructions. Before acting it must `homelab-monitor claim host:key`;
    a second claim within 24h exits with code 3 → ask the owner instead.
 6. **Report.** `homelab-monitor report <host> "Cause / Action / Result"` sends
-   one owner-mention message per handled issue.
+   one owner-mention message per handled issue. Adding
+   `--issue host:key --action "..." --result fixed|failed|escalated` also
+   records the outcome for metrics (the plain form still works unchanged).
+
+## Measurement: event log and metrics
+
+Every state change the monitor *reports* and every remediation is appended to
+`<state_dir>/events.jsonl` (one JSON object per line, file mode 0600,
+`O_APPEND` + `fsync`):
+
+| Event | Written by | Notes |
+|---|---|---|
+| `issue_opened` | `check`, when a key enters the reported set (after anti-flap) | `seed: true` for the silent first-run baseline |
+| `issue_resolved` | `check`, when a reported key disappears | |
+| `remediation` | `claim` (`result: claimed` / `refused`) and `report --result` (`fixed` / `failed` / `escalated`) | `source` says which |
+
+Timestamps follow the reported set, not notification delivery, so quiet-hours
+holding does not distort detection time. Logging is best effort: a failed
+write prints a warning to stderr and the check/claim carries on.
+
+`homelab-monitor metrics [--since 7d|24h|30m|all] [--json]` is read-only and
+pairs each open with the next resolve of the same `host:key`:
+
+- opened / resolved counts per issue, issues still open
+- time to resolve: median and p90 (linear interpolation)
+- remediation events by result and by `source:action`
+- MTTR split: episodes with a `fixed` remediation (reported between the open
+  and the next open of that issue) vs. without
+- seeded opens are excluded from counts and timing (their real start is unknown)
+
+Example output from a **synthetic** event set (illustrative only):
+
+```text
+Homelab monitor metrics (all time)
+- events recorded: 14
+- issues opened: 4 | resolved: 4
+  - app:disk:/: opened 1 / resolved 1
+  - app:svc:web: opened 1 / resolved 1
+  - nas:offline: opened 1 / resolved 1
+  - pve:vm:101: opened 1 / resolved 1
+- time to resolve (n=4): median 32m | p90 2h 15m
+- remediation events: 6 (claimed 3, escalated 1, fixed 2)
+  - claim:clean cache: 1
+  - claim:restart web: 1
+  - claim:start vm: 1
+  - report:clean cache: 1
+  - report:restart web: 1
+  - report:start vm: 1
+- MTTR with a fixed remediation: mean 8m | median 8m (n=2)
+- MTTR without: mean 1h 52m | median 1h 52m (n=2)
+```
+
+These are not numbers from my homelab. The private deployment has the same
+event log, but its measurements are not published here.
 
 See [`docs/agent-adapter.md`](docs/agent-adapter.md) for how to wire this to
 cron + any CLI agent, to an agent framework's scheduled job, or to no LLM at
@@ -120,13 +173,14 @@ gate hashes issue identity, not wording.
 ```bash
 python -m venv .venv && . .venv/bin/activate
 pip install -e ".[dev]"
-pytest -q                          # 56 tests, all with fakes (no SSH/network)
+pytest -q                          # 70 tests, all with fakes (no SSH/network)
 python demo/local_demo.py          # docker-free walkthrough on 127.0.0.1
 
 cp config.example.yaml config.yaml          # edit hosts/checks
 cp RUNBOOK.example.md RUNBOOK.md            # edit allowed actions
 homelab-monitor check all --dry-run
 homelab-monitor gate --peek
+homelab-monitor metrics --since 7d
 ```
 
 Docker demo (fake target container + monitor in dry-run mode):
@@ -147,8 +201,8 @@ Cron example:
 ## Repository layout
 
 ```
-homelab_monitor/   config.py  checks.py  state.py  gate.py  notify.py  ledger.py  cli.py
-tests/             config, state diffing, gate hashing, notify, checks/CLI (fakes only)
+homelab_monitor/   config.py  checks.py  state.py  gate.py  notify.py  ledger.py  events.py  metrics.py  cli.py
+tests/             config, state diffing, gate hashing, notify, checks/CLI, event log + metrics (fakes only)
 demo/              docker + local demo configs, local_demo.py
 docs/              agent-adapter.md
 examples/          wake-agent.sh
@@ -166,14 +220,18 @@ RUNBOOK.example.md config.example.yaml docker-compose.yml Dockerfile
 | Scheduler/agent | Hermes Agent cron jobs (script-only, no LLM) + a gated agent job | Framework-agnostic CLI contracts |
 | VM auto-start | Done by the monitor itself with a 30-minute cooldown | Moved to the agent behind `claim` |
 | At-most-once | Runbook instruction + cooldown | Same rule, enforced by a ledger |
-| Tests / CI / demo | None (personal script) | 56 pytest tests, ruff, gitleaks, docker + local demo |
+| Event log / metrics | `events.jsonl` + a metrics script (Korean output); auto VM starts logged as remediations | `events.jsonl` + `metrics` subcommand (English); remediations come from `claim` / `report --result` |
+| Tests / CI / demo | None (personal script) | 70 pytest tests, ruff, gitleaks, docker + local demo |
 
 ## Limitations
 
-- Single-node scheduler; no HA, no metrics history or dashboards. For that, use
+- Single-node scheduler; no HA, no dashboards. The event log gives incident
+  metrics (time to resolve, remediation outcomes), not time-series history. For that, use
   Prometheus/Alertmanager, Uptime Kuma, Netdata, etc. This project is about the
   *gate + runbook-driven remediation* pattern, not about replacing them.
 - The ledger and state files assume one writer at a time (cron runs don't overlap).
+- MTTR "with vs. without a fixed remediation" is a correlation over few
+  episodes, not a controlled comparison; small `n` is shown next to every number.
 - The runbook is enforced by the agent's instructions plus the claim ledger;
   the tooling does not sandbox the agent's shell. Run the agent as a
   least-privilege user with sudo rules scoped to the allowed actions.

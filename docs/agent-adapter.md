@@ -9,6 +9,8 @@ scheduler + agent combination can consume:
 | Gate (machine) | `homelab-monitor gate --json` | `{"changed": bool, "hash", "previous_hash", "current", "added", "removed"}` |
 | Claim | `homelab-monitor claim host:key "action"` | exit 0 = may act once; exit 3 = already attempted, ask the owner |
 | Report | `homelab-monitor report host "text"` | sends an owner-mention message via the configured notifiers |
+| Report + outcome | `... report host "text" --issue host:key --action "..." --result fixed\|failed\|escalated` | same message, plus a `remediation` event in `events.jsonl` |
+| Metrics | `homelab-monitor metrics [--since 7d] [--json]` | read-only summary: time to resolve (median/p90), remediation results, MTTR with vs. without a fix |
 
 The gate records the new hash when it reports a change, so each change is
 delivered exactly once. Use `--peek` to inspect without consuming.

@@ -13,16 +13,31 @@ import json
 import pathlib
 import time
 
+from .events import EventLog
 from .state import save_state
 
 DEFAULT_WINDOW_S = 24 * 3600
 
 
+def split_issue(issue_id: str) -> tuple[str, str | None]:
+    host, sep, key = issue_id.partition(":")
+    return host, (key if sep else None)
+
+
 class Ledger:
-    def __init__(self, path: pathlib.Path, window_s: int = DEFAULT_WINDOW_S, clock=time.time):
+    """Optional ``event_log`` records every claim as a ``remediation`` event
+    (``result`` = ``claimed`` or ``refused``) for the metrics command."""
+
+    def __init__(self, path: pathlib.Path, window_s: int = DEFAULT_WINDOW_S, clock=time.time, event_log: EventLog | None = None):
         self.path = path
         self.window_s = window_s
         self.clock = clock
+        self.event_log = event_log
+
+    def _record(self, issue_id: str, action: str, result: str) -> None:
+        if self.event_log is not None:
+            host, key = split_issue(issue_id)
+            self.event_log.append("remediation", host=host, key=key, action=action, result=result, source="claim")
 
     def _load(self) -> dict:
         if not self.path.exists():
@@ -35,9 +50,11 @@ class Ledger:
         data = {k: v for k, v in data.items() if now - v["at"] < self.window_s}  # prune expired
         if issue_id in data:
             save_state(self.path, data)
+            self._record(issue_id, action, "refused")
             return False
         data[issue_id] = {"at": now, "action": action}
         save_state(self.path, data)
+        self._record(issue_id, action, "claimed")
         return True
 
     def history(self) -> dict:

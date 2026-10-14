@@ -23,7 +23,8 @@ Work only on `+` lines. Fix what is in scope **first**, then report.
 4. Act, with a bounded timeout on every command.
 5. **Verify** (re-run the relevant status command).
 6. **Report** once per issue with cause / action / result:
-   `homelab-monitor report <host> "Cause: … / Action: … / Result: …"`
+   `homelab-monitor report <host> "Cause: … / Action: … / Result: …" --issue <host>:<key> --action "<action>" --result fixed|failed|escalated`
+   (the flags record the outcome in the event log for `homelab-monitor metrics`)
 
 If nothing was done and nothing needs the owner, do not report.
 

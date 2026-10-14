@@ -68,7 +68,20 @@ def main() -> None:
         run("check", "all", "--dry-run")
         run("gate")
         print("== 8. agent report")
-        run("report", "demo-target", "Cause: service stopped / Action: restarted once / Result: healthy", "--dry-run")
+        run(
+            "report",
+            "demo-target",
+            "Cause: service stopped / Action: restarted once / Result: healthy",
+            "--dry-run",
+            "--issue",
+            "demo-target:web",
+            "--action",
+            "restart service",
+            "--result",
+            "fixed",
+        )
+        print("== 9. metrics from the append-only event log (seconds-scale, demo only)")
+        run("metrics")
         srv.shutdown()
 
 
